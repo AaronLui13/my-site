@@ -159,7 +159,7 @@ body {
   border-right: 14px solid transparent;
   border-top: 26px solid var(--accent);
   filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.2));
-  z-index: 2;
+  z-index: 3;
 }
 
 .wheel {
@@ -170,6 +170,31 @@ body {
   box-shadow: 0 22px 40px rgba(0, 0, 0, 0.2);
   transition: transform 4.2s cubic-bezier(0.22, 0.9, 0.2, 1);
   position: relative;
+  overflow: hidden;
+}
+
+.wheel-highlight {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  filter: blur(10px);
+  opacity: 0;
+  z-index: 1;
+}
+
+.wheel-highlight.pulse {
+  opacity: 1;
+  animation: winnerPulse 0.8s ease-out;
+}
+
+.wheel-highlight.steady {
+  opacity: 0.2;
+}
+
+.wheel-highlight.idle {
+  opacity: 0;
 }
 
 .wheelCore {
@@ -181,6 +206,7 @@ body {
   position: absolute;
   inset: 0;
   margin: auto;
+  z-index: 2;
 }
 
 .wheelResult {
@@ -231,6 +257,21 @@ body {
   text-align: center;
   color: var(--muted);
   z-index: 1;
+}
+
+@keyframes winnerPulse {
+  0% {
+    opacity: 0.2;
+    filter: blur(6px);
+  }
+  40% {
+    opacity: 1;
+    filter: blur(14px);
+  }
+  100% {
+    opacity: 0.2;
+    filter: blur(10px);
+  }
 }
 
 .wheelList {

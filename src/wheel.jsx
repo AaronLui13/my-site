@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./wheel.css";
 
@@ -54,6 +54,8 @@ const RAW_DATA = {
 };
 
 const SPIN_DURATION_MS = 4200;
+const SPIN_END_BUFFER_MS = 80;
+const WINNER_PULSE_MS = 800;
 const roastLines = [
   "點呀…呢個完全唔啱食？咁你想食咩先講啦。",
   "你係咪又想講「是但」？是但都可以嫌，勁。",
@@ -84,16 +86,28 @@ function App() {
   const [result, setResult] = useState("—");
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [winnerPhase, setWinnerPhase] = useState("idle");
   const [spinCount, setSpinCount] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [roastText, setRoastText] = useState("");
   const [lastRoastIndex, setLastRoastIndex] = useState(-1);
+  const audioContextRef = useRef(null);
 
   const options = RAW_DATA[category];
   const wheelBackground = useMemo(
     () => buildWheelColors(options.length),
     [options.length]
   );
+  const highlightGradient = useMemo(() => {
+    if (selectedIndex === null) {
+      return "conic-gradient(transparent 0deg 360deg)";
+    }
+    const sliceDeg = 360 / options.length;
+    const startDeg = selectedIndex * sliceDeg;
+    const endDeg = (selectedIndex + 1) * sliceDeg;
+    return `conic-gradient(transparent 0deg ${startDeg}deg, rgba(255, 255, 255, 0.65) ${startDeg}deg ${endDeg}deg, transparent ${endDeg}deg 360deg)`;
+  }, [options.length, selectedIndex]);
 
   const pickRoast = () => {
     let next = Math.floor(Math.random() * roastLines.length);
@@ -106,9 +120,45 @@ function App() {
     return roastLines[next];
   };
 
+  const ensureAudioContext = () => {
+    if (!audioContextRef.current) {
+      const AudioContext =
+        window.AudioContext || window.webkitAudioContext;
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      audioContextRef.current.resume();
+    }
+    return audioContextRef.current;
+  };
+
+  const playDing = () => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, now);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.22);
+  };
+
   const spin = () => {
     if (isSpinning) return;
     setIsSpinning(true);
+    setWinnerPhase("idle");
+    setSelectedIndex(null);
+    // Must be initialized after user gesture.
+    ensureAudioContext();
 
     const index = Math.floor(Math.random() * options.length);
     const segmentAngle = 360 / options.length;
@@ -120,11 +170,24 @@ function App() {
 
     window.setTimeout(() => {
       setResult(options[index]);
-      setSpinCount((prev) => prev + 1);
-      setRoastText(pickRoast());
+      setSpinCount((prev) => {
+        const next = prev + 1;
+        if (next > 1) {
+          setRoastText(pickRoast());
+        } else {
+          setRoastText("");
+        }
+        return next;
+      });
       setShowModal(true);
+      setSelectedIndex(index);
+      setWinnerPhase("pulse");
+      playDing();
+      window.setTimeout(() => {
+        setWinnerPhase("steady");
+      }, WINNER_PULSE_MS);
       setIsSpinning(false);
-    }, SPIN_DURATION_MS);
+    }, SPIN_DURATION_MS + SPIN_END_BUFFER_MS);
   };
 
   return (
@@ -145,6 +208,8 @@ function App() {
               onClick={() => {
                 setCategory("cuisines");
                 setResult("—");
+                setSelectedIndex(null);
+                setWinnerPhase("idle");
               }}
             >
               菜式分類
@@ -154,6 +219,8 @@ function App() {
               onClick={() => {
                 setCategory("chains");
                 setResult("—");
+                setSelectedIndex(null);
+                setWinnerPhase("idle");
               }}
             >
               連鎖餐廳
@@ -169,6 +236,10 @@ function App() {
                 transform: `rotate(${rotation}deg)`,
               }}
             >
+              <div
+                className={`wheel-highlight ${winnerPhase}`}
+                style={{ background: highlightGradient }}
+              />
               <div className="wheelCore" />
             </div>
           </div>
